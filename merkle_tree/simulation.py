@@ -23,6 +23,51 @@ def print_header(title: str):
     print(f"{Fore.CYAN}{Style.BRIGHT}{title.center(80)}")
     print("=" * 80)
 
+def verify_proof_with_trace(leaf_hash: str, proof: list, expected_root: str, is_tampered: bool = False) -> bool:
+    """Xác minh proof và hiển thị quá trình tính toán băm chi tiết từng tầng."""
+    from merkle_tree.tree import hash_pair
+    current_hash = leaf_hash
+    print(f"    * Bắt đầu từ lá (Leaf): {Fore.YELLOW}{current_hash[:16]}...")
+    
+    for level, step in enumerate(proof):
+        sibling_hash = step['hash']
+        direction = step['direction']
+        
+        if direction == 'right':
+            left_hash = current_hash
+            right_hash = sibling_hash
+            parent_hash = hash_pair(left_hash, right_hash)
+            print(f"    * [Tầng {level}]: hash_pair(Hiện tại, Anh em bên {direction})")
+            print(f"      - Trái (Hiện tại):  {Fore.YELLOW}{left_hash[:16]}...")
+            if is_tampered and level == 0:
+                print(f"      - Phải (Anh em):    {Fore.RED}{right_hash[:16]}... [BỊ GIẢ MẠO]")
+            else:
+                print(f"      - Phải (Anh em):    {Fore.CYAN}{right_hash[:16]}...")
+        else:
+            left_hash = sibling_hash
+            right_hash = current_hash
+            parent_hash = hash_pair(left_hash, right_hash)
+            print(f"    * [Tầng {level}]: hash_pair(Anh em bên {direction}, Hiện tại)")
+            if is_tampered and level == 0:
+                print(f"      - Trái (Anh em):    {Fore.RED}{left_hash[:16]}... [BỊ GIẢ MẠO]")
+            else:
+                print(f"      - Trái (Anh em):    {Fore.CYAN}{left_hash[:16]}...")
+            print(f"      - Phải (Hiện tại):  {Fore.YELLOW}{right_hash[:16]}...")
+            
+        print(f"      => Kết quả băm cha:  {Fore.YELLOW}{parent_hash[:16]}...")
+        current_hash = parent_hash
+        
+    print(f"    * [Kết luận]:")
+    print(f"      - Gốc tính toán:  {Fore.YELLOW}{current_hash}")
+    print(f"      - Gốc trên mạng:  {Fore.YELLOW}{expected_root}")
+    match = current_hash == expected_root
+    if match:
+        print(f"      => So khớp: {Fore.GREEN}{Style.BRIGHT}TRÙNG KHỚP! (Chứng minh hợp lệ)")
+    else:
+        print(f"      => So khớp: {Fore.RED}{Style.BRIGHT}KHÔNG TRÙNG KHỚP! (Bị từ chối)")
+    return match
+
+
 def print_tree_recursive(tree: MerkleTree, level: int, index: int, prefix: str = "", is_left: bool = True, is_root: bool = False):
     """Vẽ cây Merkle đệ quy dạng sơ đồ cây ASCII có màu sắc."""
     node_val = tree.tree[level][index]
@@ -102,14 +147,7 @@ def run_scripted_demo():
     # 5. Xác thực chứng minh thành viên cho Bob
     print(f"\n{Fore.GREEN}[Bước 5] Xác minh chứng minh thành viên (Membership Verification)")
     current_root = tree.get_root()
-    is_valid = MerkleTree.verify_proof(target_cm, proof, current_root)
-    
-    print(f"  - Coin commitment cần xác minh: {Fore.YELLOW}{target_cm}")
-    print(f"  - Gốc Merkle Root kỳ vọng:     {Fore.YELLOW}{current_root}")
-    if is_valid:
-        print(f"  - Kết quả: {Fore.GREEN}{Style.BRIGHT}XÁC MINH THÀNH CÔNG! Coin này thuộc về tập ẩn danh (Anonymity Set).")
-    else:
-        print(f"  - Kết quả: {Fore.RED}{Style.BRIGHT}XÁC MINH THẤT BẠI!")
+    verify_proof_with_trace(target_cm, proof, current_root)
         
     # 6. Thử nghiệm giả mạo hoặc thay đổi dữ liệu
     print(f"\n{Fore.GREEN}[Bước 6] Thử nghiệm tấn công / Giả mạo dữ liệu")
@@ -121,22 +159,14 @@ def run_scripted_demo():
     print(f"  - Note giả: {fake_note}")
     print(f"  - Commitment giả: {Fore.YELLOW}{fake_cm}")
     
-    is_fake_valid = MerkleTree.verify_proof(fake_cm, proof, current_root)
-    if is_fake_valid:
-        print(f"  - Kết quả: {Fore.RED}{Style.BRIGHT}NGUY HIỂM! Chấp nhận note giả mạo.")
-    else:
-        print(f"  - Kết quả: {Fore.GREEN}{Style.BRIGHT}TỪ CHỐI THÀNH CÔNG! Note giả mạo bị phát hiện do mã băm commitment không khớp.")
+    verify_proof_with_trace(fake_cm, proof, current_root)
         
     # Kịch bản B: Sử dụng một proof bị sửa đổi mã băm
     print(f"\n{Fore.RED}Kịch bản B: Kẻ tấn công sửa đổi một mã băm trung gian trong Merkle Proof:")
     tampered_proof = [step.copy() for step in proof]
     tampered_proof[0]['hash'] = hashlib.sha256(b"tampered_data").hexdigest()
     
-    is_tampered_valid = MerkleTree.verify_proof(target_cm, tampered_proof, current_root)
-    if is_tampered_valid:
-        print(f"  - Kết quả: {Fore.RED}{Style.BRIGHT}NGUY HIỂM! Chấp nhận proof bị sửa đổi.")
-    else:
-        print(f"  - Kết quả: {Fore.GREEN}{Style.BRIGHT}TỪ CHỐI THÀNH CÔNG! Proof bị sửa đổi không thể dẫn tới gốc Merkle Root chính xác.")
+    verify_proof_with_trace(target_cm, tampered_proof, current_root, is_tampered=True)
         
     return tree
 
@@ -211,26 +241,14 @@ def run_interactive_simulation(tree: MerkleTree):
                     print(f"  Tầng {i}: Anh em bên {Fore.MAGENTA}{step['direction']:<5} {Fore.YELLOW}{step['hash']}")
                 
                 print(f"\n{Fore.CYAN}--- Thực hiện Xác minh ---")
-                is_valid = MerkleTree.verify_proof(leaf_hash, proof, root)
-                print(f"Gốc Merkle Root hiện tại: {Fore.YELLOW}{root}")
-                if is_valid:
-                    if leaf_hash == MerkleTree.EMPTY_LEAF:
-                        print(f"Kết quả: {Fore.GREEN}{Style.BRIGHT}XÁC MINH HỢP LỆ (Lá trống - EMPTY).")
-                    else:
-                        print(f"Kết quả: {Fore.GREEN}{Style.BRIGHT}XÁC MINH THÀNH CÔNG! Coin thuộc về cây.")
-                else:
-                    print(f"Kết quả: {Fore.RED}{Style.BRIGHT}XÁC MINH THẤT BẠI!")
+                verify_proof_with_trace(leaf_hash, proof, root)
                     
                 # Cho phép người dùng thử phá hoại
                 tamper = input(f"\n{Fore.YELLOW}Bạn muốn thử giả mạo mã băm lá này để kiểm tra hệ thống bảo mật không? (y/n): ").strip().lower()
                 if tamper == 'y':
                     fake_hash = hashlib.sha256(b"fake_coin").hexdigest()
-                    is_fake_valid = MerkleTree.verify_proof(fake_hash, proof, root)
                     print(f"Mã băm giả: {Fore.YELLOW}{fake_hash}")
-                    if is_fake_valid:
-                        print(f"Kết quả: {Fore.RED}{Style.BRIGHT}LỖI HỆ THỐNG! Đã chấp nhận coin giả.")
-                    else:
-                        print(f"Kết quả: {Fore.GREEN}{Style.BRIGHT}TỪ CHỐI THÀNH CÔNG! Coin giả đã bị phát hiện.")
+                    verify_proof_with_trace(fake_hash, proof, root, is_tampered=True)
             except Exception as e:
                 print(f"{Fore.RED}Lỗi trong quá trình tạo/xác minh proof: {e}")
                 
