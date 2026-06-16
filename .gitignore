@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cảnh báo hệ thống / Thư mục môi trường ảo
+.venv/
+venv/
+ENV/
+env/
+
+# Kiểm thử / pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Cấu hình IDE / Hệ thống
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.DS_Store
+Thumbs.db
