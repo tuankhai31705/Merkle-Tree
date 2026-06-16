@@ -24,7 +24,7 @@ python merkle_tree/simulation.py
 ### Bước 3: Chạy bộ kiểm thử tự động (Unit Tests)
 Để xác minh tính đúng đắn toán học của tất cả các hàm trong hệ thống, hãy chạy:
 ```bash
-pytest -v
+python -m pytest -v
 ```
 
 ---
